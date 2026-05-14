@@ -12,6 +12,7 @@ import {
 } from "@bistro/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Keyboard,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -28,6 +29,7 @@ import { useCartStore } from "./src/store/cartStore";
 
 type CategoryFilter = "all" | MenuCategory;
 type AppScreen = "home" | "cart";
+type AssistantReturnScreen = "home" | "cart";
 
 const defaultMessages: ChatMessage[] = [
   {
@@ -72,9 +74,9 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(defaultMessages);
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [menuLoading, setMenuLoading] = useState(true);
-  const [screen, setScreen] = useState<AppScreen>("home");
+  const [screen, setScreen] = useState<AppScreen | "assistant">("home");
+  const [assistantReturnScreen, setAssistantReturnScreen] = useState<AssistantReturnScreen>("home");
   const recordingRef = useRef<Audio.Recording | null>(null);
 
   const cart = useCartStore((state) => state.cart);
@@ -294,6 +296,16 @@ export default function App() {
     await startVoiceRecording();
   }
 
+  function openAssistantPage() {
+    setAssistantReturnScreen(screen === "assistant" ? "home" : screen);
+    setScreen("assistant");
+  }
+
+  function closeAssistantPage() {
+    setScreen(assistantReturnScreen);
+    Keyboard.dismiss();
+  }
+
   return (
     <LinearGradient colors={["#f8fafc", "#ecfeff", "#fef9c3"]} style={styles.rootGradient}>
       <StatusBar barStyle="dark-content" />
@@ -317,15 +329,28 @@ export default function App() {
             </>
           ) : (
             <>
-              <Pressable onPress={() => setScreen("home")} style={styles.backButton}>
+              <Pressable onPress={screen === "assistant" ? closeAssistantPage : () => setScreen("home")} style={styles.backButton}>
                 <Ionicons name="chevron-back" size={18} color="#0f172a" />
-                <Text style={styles.backButtonText}>Back to Menu</Text>
+                <Text style={styles.backButtonText}>
+                  {screen === "assistant" ? "Back" : "Back to Menu"}
+                </Text>
               </Pressable>
 
-              <View style={styles.cartSummaryPill}>
-                <Ionicons name="cart" size={14} color="#f8fafc" />
-                <Text style={styles.cartSummaryText}>{cartBadgeText}</Text>
-              </View>
+              {screen === "assistant" ? (
+                <Pressable onPress={() => setScreen("cart")} style={styles.cartIconButton}>
+                  <Ionicons name="cart-outline" size={23} color="#0f172a" />
+                  {cartCount > 0 ? (
+                    <View style={styles.cartBadge}>
+                      <Text style={styles.cartBadgeText}>{cartBadgeText}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              ) : (
+                <View style={styles.cartSummaryPill}>
+                  <Ionicons name="cart" size={14} color="#f8fafc" />
+                  <Text style={styles.cartSummaryText}>{cartBadgeText}</Text>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -407,7 +432,7 @@ export default function App() {
               Tip: set EXPO_PUBLIC_API_BASE_URL in `apps/mobile/.env` when running on a physical iPhone.
             </Text> */}
           </ScrollView>
-        ) : (
+        ) : screen === "cart" ? (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.cartPageHeader}>
               <Text style={styles.cartPageTitle}>Your Order</Text>
@@ -426,41 +451,35 @@ export default function App() {
               <Text style={styles.continueButtonText}>Continue Browsing Menu</Text>
             </Pressable>
           </ScrollView>
+        ) : (
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.assistantPageHeader}>
+              <Text style={styles.assistantPageTitle}>AI Order Assistant</Text>
+              <Text style={styles.assistantPageSubtitle}>
+                Ask in natural language or use voice to update your cart.
+              </Text>
+            </View>
+
+            <AssistantPanel
+              messages={chatMessages}
+              input={chatInput}
+              isLoading={isSending}
+              isRecording={isRecording}
+              onInputChange={setChatInput}
+              onSend={onSendMessage}
+              onToggleVoice={onToggleVoice}
+            />
+          </ScrollView>
         )}
 
-        <View pointerEvents="box-none" style={styles.assistantFloatingLayer}>
-          {isAssistantOpen ? (
-            <View style={styles.assistantFloatingPanel}>
-              <View style={styles.assistantFloatingHeader}>
-                <Text style={styles.assistantFloatingTitle}>AI Assistant</Text>
-                <Pressable onPress={() => setIsAssistantOpen(false)} style={styles.assistantFloatingCloseButton}>
-                  <Ionicons name="close" size={16} color="#cbd5e1" />
-                </Pressable>
-              </View>
-
-              <AssistantPanel
-                messages={chatMessages}
-                input={chatInput}
-                isLoading={isSending}
-                isRecording={isRecording}
-                onInputChange={setChatInput}
-                onSend={onSendMessage}
-                onToggleVoice={onToggleVoice}
-              />
-            </View>
-          ) : null}
-
-          <Pressable
-            onPress={() => setIsAssistantOpen((current) => !current)}
-            style={[
-              styles.assistantFloatingButton,
-              isAssistantOpen ? styles.assistantFloatingButtonActive : null,
-            ]}
-          >
-            <Ionicons name={isAssistantOpen ? "chevron-down" : "sparkles"} size={18} color="#f8fafc" />
-            {!isAssistantOpen ? <Text style={styles.assistantFloatingButtonText}>AI</Text> : null}
-          </Pressable>
-        </View>
+        {screen !== "assistant" ? (
+          <View pointerEvents="box-none" style={styles.assistantFloatingLayer}>
+            <Pressable onPress={openAssistantPage} style={styles.assistantFloatingButton}>
+              <Ionicons name="sparkles" size={18} color="#f8fafc" />
+              <Text style={styles.assistantFloatingButtonText}>AI</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -729,42 +748,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 28,
   },
-  assistantFloatingPanel: {
-    width: "100%",
-    maxWidth: 360,
-    marginBottom: 12,
+  assistantPageHeader: {
+    backgroundColor: "#0f172a",
     borderRadius: 18,
-    overflow: "hidden",
-    shadowColor: "#020617",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 12,
+    padding: 14,
   },
-  assistantFloatingHeader: {
-    backgroundColor: "#0b1220",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  assistantPageTitle: {
+    color: "#f8fafc",
+    fontSize: 22,
+    fontWeight: "900",
   },
-  assistantFloatingTitle: {
-    color: "#e2e8f0",
+  assistantPageSubtitle: {
+    marginTop: 6,
+    color: "#cbd5e1",
     fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  assistantFloatingCloseButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#1e293b",
+    lineHeight: 18,
   },
   assistantFloatingButton: {
     minWidth: 56,
@@ -781,9 +779,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.24,
     shadowRadius: 10,
     elevation: 8,
-  },
-  assistantFloatingButtonActive: {
-    backgroundColor: "#0f172a",
   },
   assistantFloatingButtonText: {
     color: "#f8fafc",
