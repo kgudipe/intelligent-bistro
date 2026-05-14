@@ -5,9 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "concurrently \"npm run dev -w apps/backend\" \"npm run dev -w apps/mobile\"",
-    "dev:backend": "npm run dev -w apps/backend",
-    "dev:mobile": "npm run dev -w apps/mobile"
+    "dev": "npm run build -w packages/shared && concurrently \"npm run dev -w apps/backend\" \"npm run dev -w apps/mobile\"",
+    "dev:backend": "npm run build -w packages/shared && npm run dev -w apps/backend",
+    "dev:mobile": "npm run build -w packages/shared && npm run dev -w apps/mobile",
+    "typecheck": "npm run build -w packages/shared && npm run typecheck -w apps/backend && npm run typecheck -w apps/mobile",
+    "build": "npm run build -w packages/shared && npm run build -w apps/backend"
   },
   "repository": {
     "type": "git",

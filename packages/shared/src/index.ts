@@ -180,3 +180,108 @@ export function getItemPrice(item: MenuItem, size?: ItemSize): number {
 export function findMenuItemById(itemId: string): MenuItem | undefined {
   return MENU_ITEMS.find((item) => item.id === itemId);
 }
+
+function cartKey(itemId: string, size?: ItemSize): string {
+  return `${itemId}::${size ?? "regular"}`;
+}
+
+function mergeCartItems(items: CartItem[]): CartItem[] {
+  const byKey = new Map<string, CartItem>();
+
+  for (const item of items) {
+    if (item.quantity <= 0) {
+      continue;
+    }
+
+    const key = cartKey(item.itemId, item.size);
+    const existing = byKey.get(key);
+
+    if (existing) {
+      existing.quantity += item.quantity;
+      continue;
+    }
+
+    byKey.set(key, { ...item });
+  }
+
+  return [...byKey.values()];
+}
+
+export function applyCartActions(currentCart: CartItem[], actions: CartAction[]): CartItem[] {
+  let next = mergeCartItems(currentCart);
+
+  for (const action of actions) {
+    if (action.type === "clear_cart") {
+      next = [];
+      continue;
+    }
+
+    if (action.type === "add") {
+      next = mergeCartItems([
+        ...next,
+        {
+          itemId: action.itemId,
+          quantity: action.quantity,
+          size: action.size,
+        },
+      ]);
+      continue;
+    }
+
+    if (action.type === "set_quantity") {
+      let matched = false;
+
+      next = next
+        .map((cartItem) => {
+          if (cartItem.itemId === action.itemId && cartItem.size === action.size) {
+            matched = true;
+            return {
+              ...cartItem,
+              quantity: action.quantity,
+            };
+          }
+
+          return cartItem;
+        })
+        .filter((cartItem) => cartItem.quantity > 0);
+
+      if (!matched && action.quantity > 0) {
+        next = mergeCartItems([
+          ...next,
+          {
+            itemId: action.itemId,
+            size: action.size,
+            quantity: action.quantity,
+          },
+        ]);
+      }
+      continue;
+    }
+
+    if (action.type === "remove") {
+      const removeQuantity = action.quantity ?? Number.MAX_SAFE_INTEGER;
+      let pending = removeQuantity;
+
+      next = next
+        .map((cartItem) => {
+          const sameItem = cartItem.itemId === action.itemId;
+          const sameSize = action.size ? cartItem.size === action.size : true;
+
+          if (!sameItem || !sameSize || pending <= 0) {
+            return cartItem;
+          }
+
+          const deduction = Math.min(cartItem.quantity, pending);
+          pending -= deduction;
+
+          return {
+            ...cartItem,
+            quantity: cartItem.quantity - deduction,
+          };
+        })
+        .filter((cartItem) => cartItem.quantity > 0);
+    }
+  }
+
+  return mergeCartItems(next);
+}
